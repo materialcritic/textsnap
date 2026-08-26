@@ -165,17 +165,33 @@ private struct RecognitionPane: View {
 
             Section("Translation") {
                 Toggle("Translate captured text", isOn: $settings.translateCapturedText)
+                Picker("Provider", selection: $settings.translationProvider) {
+                    ForEach(TranslationProvider.allCases, id: \.self) { provider in
+                        Text(provider.title).tag(provider)
+                    }
+                }
+                .disabled(!settings.translateCapturedText)
                 Picker("Translate to", selection: $settings.translationTargetLanguage) {
-                    ForEach(TranslationLanguages.targets, id: \.self) { code in
+                    ForEach(TranslationLanguages.targets(for: settings.translationProvider), id: \.self) { code in
                         Text(Recognizer.displayName(forLanguage: code)).tag(code)
                     }
                 }
                 .disabled(!settings.translateCapturedText)
-                TextField("Contact email (optional)", text: $settings.myMemoryContactEmail)
-                    .disabled(!settings.translateCapturedText)
-                Text("Shows the original text and its translation in a popup, then copies the translation to the clipboard. Language detection runs on-device; the translation itself is sent to MyMemory's free translation service, so translated text does leave the machine. Adding a contact email raises MyMemory's free daily quota.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                switch settings.translationProvider {
+                case .myMemory:
+                    TextField("Contact email (optional)", text: $settings.myMemoryContactEmail)
+                        .disabled(!settings.translateCapturedText)
+                    Text("Shows the original text and its translation in a popup, then copies the translation to the clipboard. Language detection runs on-device; the translation itself is sent to MyMemory's free translation service, so translated text does leave the machine. MyMemory rejects captures over 500 characters; adding a contact email raises its free daily quota.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .deepL:
+                    SecureField("DeepL API key", text: $settings.deepLAPIKey)
+                        .disabled(!settings.translateCapturedText)
+                    Text("Stored in the Keychain, not in TextSnap's preferences file. Get a free key at deepl.com/pro-api (Account → API Keys). DeepL's request limit is far higher than MyMemory's, but translated text is still sent to DeepL's servers.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("Custom words") {

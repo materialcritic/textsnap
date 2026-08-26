@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import Security
 
 /// A recorded global shortcut. `modifiers` stores `NSEvent.ModifierFlags.rawValue`.
 struct KeyCombo: Codable, Equatable {
@@ -13,6 +14,58 @@ struct KeyCombo: Codable, Equatable {
 
     var displayString: String {
         KeyCodes.modifierString(flags) + KeyCodes.name(for: keyCode)
+    }
+}
+
+enum TranslationProvider: String, CaseIterable, Hashable {
+    case myMemory
+    case deepL
+
+    var title: String {
+        switch self {
+        case .myMemory: return "MyMemory (free, no signup)"
+        case .deepL:    return "DeepL (higher limits, needs an API key)"
+        }
+    }
+}
+
+/// Minimal Keychain wrapper. Used only for the DeepL API key, which is a real credential
+/// unlike the rest of AppSettings' preferences — those are fine in plain UserDefaults,
+/// but a plist on disk is not where a secret belongs.
+enum KeychainStore {
+    private static let service = "com.textsnap.deepl"
+    private static let account = "apiKey"
+
+    static func save(_ value: String) {
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        SecItemDelete(query as CFDictionary)
+        guard !value.isEmpty else { return }
+
+        var attributes = query
+        attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        SecItemAdd(attributes as CFDictionary, nil)
+    }
+
+    static func load() -> String {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data,
+              let value = String(data: data, encoding: .utf8)
+        else { return "" }
+        return value
     }
 }
 
@@ -71,9 +124,20 @@ final class AppSettings: ObservableObject {
     // MARK: Translation
 
     @Published var translateCapturedText: Bool { didSet { store.set(translateCapturedText, forKey: "translateCapturedText") } }
+    @Published var translationProvider: TranslationProvider {
+        didSet {
+            store.set(translationProvider.rawValue, forKey: "translationProvider")
+            let validTargets = TranslationLanguages.targets(for: translationProvider)
+            if !validTargets.contains(translationTargetLanguage) {
+                translationTargetLanguage = validTargets.first ?? "en"
+            }
+        }
+    }
     @Published var translationTargetLanguage: String { didSet { store.set(translationTargetLanguage, forKey: "translationTargetLanguage") } }
     /// Optional; passed to MyMemory's API to raise the free daily quota. Never required.
     @Published var myMemoryContactEmail: String { didSet { store.set(myMemoryContactEmail, forKey: "myMemoryContactEmail") } }
+    /// Stored in the Keychain, not UserDefaults — see `KeychainStore`.
+    @Published var deepLAPIKey: String { didSet { KeychainStore.save(deepLAPIKey) } }
 
     // MARK: Feedback
 
@@ -116,6 +180,7 @@ final class AppSettings: ObservableObject {
             "speechRate": 0.5,
             "openCapturedLinks": false,
             "translateCapturedText": false,
+            "translationProvider": TranslationProvider.myMemory.rawValue,
             "translationTargetLanguage": "en",
             "myMemoryContactEmail": "",
             "playSound": true,
@@ -138,8 +203,10 @@ final class AppSettings: ObservableObject {
         openCapturedLinks = store.bool(forKey: "openCapturedLinks")
 
         translateCapturedText = store.bool(forKey: "translateCapturedText")
+        translationProvider = TranslationProvider(rawValue: store.string(forKey: "translationProvider") ?? "") ?? .myMemory
         translationTargetLanguage = store.string(forKey: "translationTargetLanguage") ?? "en"
         myMemoryContactEmail = store.string(forKey: "myMemoryContactEmail") ?? ""
+        deepLAPIKey = KeychainStore.load()
 
         playSound = store.bool(forKey: "playSound")
         soundName = store.string(forKey: "soundName") ?? "Pop"

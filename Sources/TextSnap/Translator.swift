@@ -7,11 +7,37 @@ import NaturalLanguage
 enum TranslationLanguages {
     /// A broad, fixed set of MyMemory-supported languages. MyMemory covers far more than
     /// this, but a curated list keeps the Settings picker short and each entry usable.
-    static let targets = [
+    static let myMemoryTargets = [
         "en", "es", "fr", "de", "it", "pt", "nl", "ru", "ja", "ko", "zh", "ar", "hi",
         "tr", "pl", "sv", "da", "no", "fi", "cs", "el", "he", "hu", "id", "th", "vi",
         "uk", "ro", "bg", "sk", "hr", "sr", "lt", "lv", "et", "fa", "ur"
     ].sorted { Recognizer.displayName(forLanguage: $0) < Recognizer.displayName(forLanguage: $1) }
+
+    /// DeepL's supported *target* languages, as of its documented language list. A few
+    /// languages MyMemory covers (Arabic, Hindi, Thai, Vietnamese, Persian, Urdu, Hebrew,
+    /// Serbian) aren't here because DeepL doesn't support them as translation targets.
+    static let deepLTargets = [
+        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "ja", "ko", "zh",
+        "tr", "pl", "sv", "da", "no", "fi", "cs", "el", "hu", "id",
+        "uk", "ro", "bg", "sk", "lt", "lv", "et", "sl"
+    ].sorted { Recognizer.displayName(forLanguage: $0) < Recognizer.displayName(forLanguage: $1) }
+
+    static func targets(for provider: TranslationProvider) -> [String] {
+        switch provider {
+        case .myMemory: return myMemoryTargets
+        case .deepL:    return deepLTargets
+        }
+    }
+
+    /// DeepL wants uppercase codes, and for a couple of languages a specific regional
+    /// variant rather than the bare code MyMemory and the rest of the app use.
+    static func deepLCode(for code: String) -> String {
+        switch code {
+        case "en": return "EN-US"
+        case "pt": return "PT-PT"
+        default:   return code.uppercased()
+        }
+    }
 }
 
 // MARK: - Translation errors
@@ -20,6 +46,8 @@ enum TranslationError: LocalizedError {
     case noConnection
     case rateLimited
     case tooLong(limit: Int)
+    case missingAPIKey
+    case invalidAPIKey
     case serverError(String)
 
     var errorDescription: String? {
@@ -30,6 +58,10 @@ enum TranslationError: LocalizedError {
             return "The free translation quota is used up for today. Add a contact email in Settings to raise the limit, or try again tomorrow."
         case .tooLong(let limit):
             return "That capture is \(limit)+ characters, longer than the free translation service allows in one request. Try a smaller selection."
+        case .missingAPIKey:
+            return "Add a DeepL API key in Settings → Recognition to use DeepL, or switch the provider back to MyMemory."
+        case .invalidAPIKey:
+            return "DeepL rejected that API key. Check it in Settings → Recognition."
         case .serverError(let m):
             return m
         }
@@ -110,6 +142,73 @@ enum MyMemoryClient {
         let translated = envelope.responseData.translatedText
         guard !translated.contains("MYMEMORY WARNING") else { throw TranslationError.rateLimited }
         return translated
+    }
+}
+
+// MARK: - DeepL client
+
+/// Talks to DeepL's API using the key stored in the Keychain (Settings → Recognition).
+/// A free-tier key (ending `:fx`) is billed against the `api-free.deepl.com` host; a
+/// paid key uses `api.deepl.com` instead.
+enum DeepLClient {
+    private struct Envelope: Decodable {
+        struct Translation: Decodable {
+            let text: String
+            let detected_source_language: String?
+        }
+        let translations: [Translation]
+    }
+
+    private struct ErrorEnvelope: Decodable { let message: String }
+
+    static func translate(_ text: String, from source: String, to target: String) async throws -> String {
+        let apiKey = await AppSettings.shared.deepLAPIKey
+        guard !apiKey.trimmingCharacters(in: .whitespaces).isEmpty else { throw TranslationError.missingAPIKey }
+
+        let host = apiKey.hasSuffix(":fx") ? "api-free.deepl.com" : "api.deepl.com"
+        var request = URLRequest(url: URL(string: "https://\(host)/v2/translate")!)
+        request.httpMethod = "POST"
+        request.setValue("DeepL-Auth-Key \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "text", value: text),
+            URLQueryItem(name: "source_lang", value: source.uppercased()),
+            URLQueryItem(name: "target_lang", value: TranslationLanguages.deepLCode(for: target))
+        ]
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw TranslationError.noConnection
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw TranslationError.serverError("The translation service returned an error.")
+        }
+
+        switch http.statusCode {
+        case 200:
+            break
+        case 403:
+            throw TranslationError.invalidAPIKey
+        case 429, 456:
+            throw TranslationError.rateLimited
+        default:
+            let message = (try? JSONDecoder().decode(ErrorEnvelope.self, from: data))?.message
+            throw TranslationError.serverError(message ?? "Translation failed (status \(http.statusCode)).")
+        }
+
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+              let translation = envelope.translations.first
+        else {
+            throw TranslationError.serverError("The translation service sent back something unexpected.")
+        }
+        return translation.text
     }
 }
 
@@ -234,7 +333,13 @@ private struct TranslationPopupView: View {
         }
 
         do {
-            let result = try await MyMemoryClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+            let result: String
+            switch AppSettings.shared.translationProvider {
+            case .myMemory:
+                result = try await MyMemoryClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+            case .deepL:
+                result = try await DeepLClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+            }
             translatedText = result
             onTranslated(result)
         } catch {
