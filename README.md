@@ -7,13 +7,16 @@ entirely on-device through Apple's Vision framework, so no screenshot or text ev
 leaves the machine.
 
 Beyond plain text capture, it can read QR codes and barcodes, stack multiple captures
-into one growing clipboard payload, speak the captured text aloud, and run OCR against
-existing images, PDFs, or whatever is already sitting on the clipboard.
+into one growing clipboard payload, translate captured text on-device, speak the
+captured text aloud, and run OCR against existing images, PDFs, or whatever is already
+sitting on the clipboard.
 
 ## Requirements
 
-- macOS 13 (Ventura) or newer
-- Xcode or the Xcode Command Line Tools (for `swift build`)
+- macOS 15 (Sequoia) or newer — required by the Translation framework used for
+  captured-text translation
+- Xcode 16 or newer (or the matching Command Line Tools), for a macOS 15 SDK and
+  `swift build`
 
 ## Build
 
@@ -83,6 +86,7 @@ While a capture is active (the dimmed selection overlay is on screen):
 | ⌘L | Toggle "keep line breaks" for this capture |
 | ⌘H | Toggle the additive clipboard |
 | ⌘S | Toggle text-to-speech |
+| ⌘T | Toggle translation |
 | esc / ⌘. | Cancel the capture |
 
 Every action is remappable in Settings → Shortcuts, including several that are
@@ -94,6 +98,7 @@ unassigned by default:
 - Capture Previous Selection — re-reads the last rectangle you selected, useful for
   reading the same region repeatedly (subtitles, a counter, a log tail)
 - Toggle Additive Clipboard / Clear Additive Clipboard
+- Toggle Translation
 - Stop Speaking
 
 ## What's implemented
@@ -128,9 +133,18 @@ everything you've collected so far — useful for pulling scattered lines into o
 It persists across app restarts, is viewable and clearable from Settings → Clipboard,
 and can be configured to auto-clear itself right after you paste.
 
+**Translation.** Off by default; turn it on in Settings → Recognition or with ⌘T during
+a capture. When enabled, a captured text goes through Apple's on-device Translation
+framework instead of straight to the clipboard: the source language is detected
+automatically, translated into whichever target language you've picked in Settings,
+and both the original and the translation are shown in a small popup. The translation
+(not the original) is what lands on the clipboard once it's ready. Detection and
+translation both run on-device — nothing is sent anywhere — though macOS may prompt to
+download language resources the first time you translate a given language pair.
+
 **Speech.** Speaks the captured text with an adjustable rate, using a system voice
 matched to the text's detected language. Has its own capture-and-speak shortcut and a
-dedicated stop-speaking shortcut.
+dedicated stop-speaking shortcut. When translation is on, it speaks the translated text.
 
 **Also.** An optional capture sound (choice of several system sounds), a small
 confirmation HUD after each capture, automatic opening of a captured link when the
@@ -155,6 +169,7 @@ reads whatever image you last copied, and dropping a file onto the app does the 
 | `TextAssembler.swift` | Reading-order and paragraph reconstruction from Vision output |
 | `CaptureCoordinator.swift` | Orchestration: overlay → capture → OCR → clipboard delivery |
 | `AdditiveClipboard.swift` | Accumulating capture buffer with disk persistence |
+| `Translator.swift` | On-device translation via the Translation framework, and its popup |
 | `Feedback.swift` | Confirmation HUD, capture sound, speech, link opening |
 | `SystemServices.swift` | Permission checks and the login-item toggle |
 | `SettingsWindow.swift` | SwiftUI settings window and its panes |
@@ -186,3 +201,7 @@ multi-page PDFs, where main-thread OCR would freeze the UI for several seconds.
 - Continuity Camera import (capturing directly from a paired iPhone's camera) isn't
   implemented. *Read Text from File…* covers the same ground for anything already saved
   to disk.
+- Translation needs macOS 15+ and, the first time a given language pair is used, a
+  one-time download of that pair's language resources — the system handles the prompt,
+  but it means the very first translation for a new pair can take longer than usual.
+  QR/barcode captures are never translated, only text captures.

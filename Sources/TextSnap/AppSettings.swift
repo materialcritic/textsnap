@@ -25,6 +25,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
     case capturePreviousSelection
     case toggleAdditiveClipboard
     case clearAdditiveClipboard
+    case toggleTranslation
     case stopSpeaking
 
     var title: String {
@@ -37,6 +38,7 @@ enum HotKeyAction: String, CaseIterable, Codable {
         case .capturePreviousSelection:   return "Capture Previous Selection"
         case .toggleAdditiveClipboard:    return "Toggle Additive Clipboard"
         case .clearAdditiveClipboard:     return "Clear Additive Clipboard"
+        case .toggleTranslation:          return "Toggle Translation"
         case .stopSpeaking:               return "Stop Speaking"
         }
     }
@@ -65,6 +67,11 @@ final class AppSettings: ObservableObject {
     @Published var textToSpeech: Bool { didSet { store.set(textToSpeech, forKey: "textToSpeech") } }
     @Published var speechRate: Double { didSet { store.set(speechRate, forKey: "speechRate") } }
     @Published var openCapturedLinks: Bool { didSet { store.set(openCapturedLinks, forKey: "openCapturedLinks") } }
+
+    // MARK: Translation
+
+    @Published var translateCapturedText: Bool { didSet { store.set(translateCapturedText, forKey: "translateCapturedText") } }
+    @Published var translationTargetLanguage: String { didSet { store.set(translationTargetLanguage, forKey: "translationTargetLanguage") } }
 
     // MARK: Feedback
 
@@ -106,6 +113,8 @@ final class AppSettings: ObservableObject {
             "textToSpeech": false,
             "speechRate": 0.5,
             "openCapturedLinks": false,
+            "translateCapturedText": false,
+            "translationTargetLanguage": "en",
             "playSound": true,
             "soundName": "Pop",
             "showSuccessPopup": true,
@@ -124,6 +133,9 @@ final class AppSettings: ObservableObject {
         textToSpeech = store.bool(forKey: "textToSpeech")
         speechRate = store.double(forKey: "speechRate")
         openCapturedLinks = store.bool(forKey: "openCapturedLinks")
+
+        translateCapturedText = store.bool(forKey: "translateCapturedText")
+        translationTargetLanguage = store.string(forKey: "translationTargetLanguage") ?? "en"
 
         playSound = store.bool(forKey: "playSound")
         soundName = store.string(forKey: "soundName") ?? "Pop"

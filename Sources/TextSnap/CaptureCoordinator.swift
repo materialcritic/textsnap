@@ -56,6 +56,8 @@ final class CaptureCoordinator {
         case .clearAdditiveClipboard:
             AdditiveClipboard.shared.clear()
             SuccessHUD.shared.show(title: "Additive clipboard cleared", subtitle: nil, force: true)
+        case .toggleTranslation:
+            toggleTranslation()
         case .stopSpeaking:
             Speaker.shared.stop()
         }
@@ -147,7 +149,13 @@ final class CaptureCoordinator {
                                    force: true)
             return
         }
-        deliver(text, speak: speak)
+        guard AppSettings.shared.translateCapturedText else {
+            deliver(text, speak: speak)
+            return
+        }
+        TranslationPopupController.shared.show(originalText: text) { [weak self] translated in
+            self?.deliver(translated, speak: speak)
+        }
     }
 
     private func finishBarcodes(_ payloads: [String], speak: Bool?) {
@@ -212,6 +220,20 @@ final class CaptureCoordinator {
                                  : "Additive clipboard off",
                                subtitle: settings.additiveClipboard
                                  ? "Captures stack up until you clear them."
+                                 : nil,
+                               force: true)
+    }
+
+    // MARK: Translation
+
+    func toggleTranslation() {
+        let settings = AppSettings.shared
+        settings.translateCapturedText.toggle()
+        SuccessHUD.shared.show(title: settings.translateCapturedText
+                                 ? "Translation on"
+                                 : "Translation off",
+                               subtitle: settings.translateCapturedText
+                                 ? "Captures show a translation before landing on the clipboard."
                                  : nil,
                                force: true)
     }

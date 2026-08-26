@@ -25,7 +25,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>LSMinimumSystemVersion</key>
-	<string>13.0</string>
+	<string>15.0</string>
 	<!-- Menu bar only: no Dock tile, no window on launch. -->
 	<key>LSUIElement</key>
 	<true/>

@@ -188,10 +188,11 @@ final class OverlayView: NSView {
         else { return false }
 
         switch key {
-        case "l": controller?.toggle(.lineBreaks); return true
-        case "h": controller?.toggle(.additive);   return true
-        case "s": controller?.toggle(.speech);     return true
-        case ".": controller?.cancel();            return true
+        case "l": controller?.toggle(.lineBreaks);   return true
+        case "h": controller?.toggle(.additive);     return true
+        case "s": controller?.toggle(.speech);       return true
+        case "t": controller?.toggle(.translation);  return true
+        case ".": controller?.cancel();              return true
         default:  return false
         }
     }
@@ -202,7 +203,7 @@ final class OverlayView: NSView {
 @MainActor
 final class OverlayController {
 
-    enum Toggle { case lineBreaks, additive, speech }
+    enum Toggle { case lineBreaks, additive, speech, translation }
 
     private var windows: [OverlayWindow] = []
     private var views: [OverlayView] = []
@@ -277,9 +278,10 @@ final class OverlayController {
 
     func toggle(_ option: Toggle) {
         switch option {
-        case .lineBreaks: settings.keepLineBreaks.toggle()
-        case .additive:   settings.additiveClipboard.toggle()
-        case .speech:     settings.textToSpeech.toggle()
+        case .lineBreaks:  settings.keepLineBreaks.toggle()
+        case .additive:    settings.additiveClipboard.toggle()
+        case .speech:      settings.textToSpeech.toggle()
+        case .translation: settings.translateCapturedText.toggle()
         }
         refreshHint()
     }
@@ -291,6 +293,7 @@ final class OverlayController {
             "\u{2318}L line breaks \(mark(settings.keepLineBreaks))",
             "\u{2318}H additive \(mark(settings.additiveClipboard))",
             "\u{2318}S speak \(mark(settings.textToSpeech))",
+            "\u{2318}T translate \(mark(settings.translateCapturedText))",
             "esc cancel"
         ].joined(separator: "   \u{00B7}   ")
         for view in views { view.hintText = hint }

@@ -144,6 +144,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         add("Additive Clipboard", #selector(toggleAdditive),
             key: .toggleAdditiveClipboard, state: settings.additiveClipboard)
         add("Text to Speech", #selector(toggleSpeech), state: settings.textToSpeech)
+        add("Translate Captured Text", #selector(toggleTranslation),
+            key: .toggleTranslation, state: settings.translateCapturedText)
         add("Play Capture Sound", #selector(toggleSound), state: settings.playSound)
 
         let count = AdditiveClipboard.shared.entries.count
@@ -209,6 +211,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleAdditive() {
         CaptureCoordinator.shared.toggleAdditiveClipboard()
+    }
+
+    @objc private func toggleTranslation() {
+        CaptureCoordinator.shared.toggleTranslation()
     }
 
     @objc private func clearAdditive() {

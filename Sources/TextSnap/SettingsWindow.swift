@@ -136,6 +136,7 @@ private struct GeneralPane: View {
 private struct RecognitionPane: View {
     @ObservedObject var settings: AppSettings
     @State private var languages: [String] = []
+    @State private var translationLanguages: [String] = ["en"]
     @State private var newWord = ""
 
     var body: some View {
@@ -159,6 +160,19 @@ private struct RecognitionPane: View {
                     .disabled(!settings.keepLineBreaks)
                 Toggle("Sharpen small selections before reading", isOn: $settings.upscaleSmallSelections)
                 Text("Turning off line breaks reflows each paragraph into one line and rejoins words split by a hyphen.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Translation") {
+                Toggle("Translate captured text", isOn: $settings.translateCapturedText)
+                Picker("Translate to", selection: $settings.translationTargetLanguage) {
+                    ForEach(translationLanguages, id: \.self) { code in
+                        Text(Recognizer.displayName(forLanguage: code)).tag(code)
+                    }
+                }
+                .disabled(!settings.translateCapturedText)
+                Text("Shows the original text and its translation in a popup, then copies the translation to the clipboard. Runs on-device; macOS may prompt to download language resources the first time you translate a given language pair.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -203,6 +217,14 @@ private struct RecognitionPane: View {
             languages = Recognizer.supportedLanguages()
             if !languages.contains(settings.primaryLanguage), let first = languages.first {
                 settings.primaryLanguage = first
+            }
+        }
+        .task {
+            let supported = await TranslationLanguages.supportedTargets()
+            guard !supported.isEmpty else { return }
+            translationLanguages = supported
+            if !supported.contains(settings.translationTargetLanguage) {
+                settings.translationTargetLanguage = supported.first { $0 == "en" } ?? supported[0]
             }
         }
     }
