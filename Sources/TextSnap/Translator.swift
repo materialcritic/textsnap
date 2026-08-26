@@ -129,6 +129,7 @@ final class TranslationPopupController {
         let hosting = NSHostingView(rootView: view)
         let size = NSSize(width: 420, height: 280)
         hosting.frame = NSRect(origin: .zero, size: size)
+        hosting.autoresizingMask = [.width, .height]
 
         let pointer = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main ?? NSScreen.screens[0]
@@ -138,7 +139,7 @@ final class TranslationPopupController {
                            height: size.height)
 
         let panel = NSPanel(contentRect: frame,
-                            styleMask: [.titled, .closable, .nonactivatingPanel, .utilityWindow],
+                            styleMask: [.titled, .closable, .resizable, .nonactivatingPanel, .utilityWindow],
                             backing: .buffered,
                             defer: false)
         panel.title = "Translation"
@@ -147,6 +148,7 @@ final class TranslationPopupController {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.minSize = NSSize(width: 320, height: 220)
         panel.contentView = hosting
         panel.makeKeyAndOrderFront(nil)
 
@@ -190,7 +192,7 @@ private struct TranslationPopupView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(width: 420, height: 280)
+        .frame(minWidth: 320, maxWidth: .infinity, minHeight: 220, maxHeight: .infinity)
         .task { await translate() }
     }
 
@@ -227,7 +229,8 @@ private struct TranslationPopupView: View {
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 84)
+                .frame(minHeight: 60, maxHeight: .infinity)
+                .layoutPriority(1)
                 Text("Copied to the clipboard")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -253,7 +256,8 @@ private struct TranslationPopupView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxHeight: 84)
+            .frame(minHeight: 60, maxHeight: .infinity)
+            .layoutPriority(1)
         }
     }
 }
