@@ -225,8 +225,9 @@ enum LanguageDetector {
 
 // MARK: - Popup window
 
-/// Shows a captured text's translation: detects the source language on-device, sends the
-/// text to MyMemory for translation, and displays both alongside each other.
+/// Shows a captured text's translation: the source language is detected before this is
+/// even shown (see `CaptureCoordinator.finishText`), so this only appears when the
+/// capture isn't already in the target language.
 @MainActor
 final class TranslationPopupController {
     static let shared = TranslationPopupController()
@@ -236,12 +237,13 @@ final class TranslationPopupController {
     private init() {}
 
     /// `onTranslated` fires once, the first time a translation succeeds, with the result.
-    func show(originalText: String, onTranslated: @escaping (String) -> Void) {
+    func show(originalText: String, sourceLanguageCode: String, onTranslated: @escaping (String) -> Void) {
         panel?.orderOut(nil)
 
         var delivered = false
         let view = TranslationPopupView(
             originalText: originalText,
+            sourceLanguageCode: sourceLanguageCode,
             targetLanguageCode: AppSettings.shared.translationTargetLanguage,
             onTranslated: { translated in
                 guard !delivered else { return }
@@ -291,11 +293,11 @@ final class TranslationPopupController {
 
 private struct TranslationPopupView: View {
     let originalText: String
+    let sourceLanguageCode: String
     let targetLanguageCode: String
     let onTranslated: (String) -> Void
     let onClose: () -> Void
 
-    @State private var detectedLanguageName: String?
     @State private var translatedText: String?
     @State private var errorMessage: String?
 
@@ -308,7 +310,7 @@ private struct TranslationPopupView: View {
                     .keyboardShortcut(.defaultAction)
             }
 
-            block(title: detectedLanguageName.map { "Original \u{00B7} \($0)" } ?? "Original",
+            block(title: "Original \u{00B7} \(Recognizer.displayName(forLanguage: sourceLanguageCode))",
                  text: originalText)
 
             Divider()
@@ -323,22 +325,13 @@ private struct TranslationPopupView: View {
 
     @MainActor
     private func translate() async {
-        let sourceCode = LanguageDetector.detect(originalText)
-        detectedLanguageName = Recognizer.displayName(forLanguage: sourceCode)
-
-        guard sourceCode != targetLanguageCode else {
-            translatedText = originalText
-            onTranslated(originalText)
-            return
-        }
-
         do {
             let result: String
             switch AppSettings.shared.translationProvider {
             case .myMemory:
-                result = try await MyMemoryClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+                result = try await MyMemoryClient.translate(originalText, from: sourceLanguageCode, to: targetLanguageCode)
             case .deepL:
-                result = try await DeepLClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+                result = try await DeepLClient.translate(originalText, from: sourceLanguageCode, to: targetLanguageCode)
             }
             translatedText = result
             onTranslated(result)

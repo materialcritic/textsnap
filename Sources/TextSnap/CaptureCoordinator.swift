@@ -153,7 +153,13 @@ final class CaptureCoordinator {
             deliver(text, speak: speak)
             return
         }
-        TranslationPopupController.shared.show(originalText: text) { [weak self] translated in
+        let sourceCode = LanguageDetector.detect(text)
+        guard sourceCode != AppSettings.shared.translationTargetLanguage else {
+            // Already in the target language — nothing to translate.
+            deliver(text, speak: speak)
+            return
+        }
+        TranslationPopupController.shared.show(originalText: text, sourceLanguageCode: sourceCode) { [weak self] translated in
             self?.deliver(translated, speak: speak)
         }
     }
