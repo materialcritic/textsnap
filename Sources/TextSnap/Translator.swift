@@ -194,6 +194,7 @@ private struct TranslationPopupView: View {
         .task { await translate() }
     }
 
+    @MainActor
     private func translate() async {
         let sourceCode = LanguageDetector.detect(originalText)
         detectedLanguageName = Recognizer.displayName(forLanguage: sourceCode)
