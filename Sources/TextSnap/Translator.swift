@@ -19,13 +19,19 @@ enum TranslationLanguages {
 enum TranslationError: LocalizedError {
     case noConnection
     case rateLimited
+    case tooLong(limit: Int)
     case serverError(String)
 
     var errorDescription: String? {
         switch self {
-        case .noConnection:      return "Couldn't reach the translation service. Check your connection."
-        case .rateLimited:       return "The free translation quota is used up for today. Add a contact email in Settings to raise the limit, or try again tomorrow."
-        case .serverError(let m): return m
+        case .noConnection:
+            return "Couldn't reach the translation service. Check your connection."
+        case .rateLimited:
+            return "The free translation quota is used up for today. Add a contact email in Settings to raise the limit, or try again tomorrow."
+        case .tooLong(let limit):
+            return "That capture is \(limit)+ characters, longer than the free translation service allows in one request. Try a smaller selection."
+        case .serverError(let m):
+            return m
         }
     }
 }
@@ -37,13 +43,33 @@ enum TranslationError: LocalizedError {
 /// quota from ~5,000 to ~50,000 words. Sending text here means it leaves the machine,
 /// unlike every other recognition feature in the app, which runs entirely on-device.
 enum MyMemoryClient {
+    /// MyMemory rejects anonymous requests over this length outright.
+    static let maxQueryLength = 500
+
     private struct Envelope: Decodable {
         struct Data: Decodable { let translatedText: String }
         let responseData: Data
+        /// MyMemory sends this as a number on success but sometimes as a string
+        /// (e.g. `"403"`) on failure, so decode either shape.
         let responseStatus: Int
+
+        enum CodingKeys: String, CodingKey { case responseData, responseStatus }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            responseData = try container.decode(Data.self, forKey: .responseData)
+            if let intValue = try? container.decode(Int.self, forKey: .responseStatus) {
+                responseStatus = intValue
+            } else {
+                let stringValue = try container.decode(String.self, forKey: .responseStatus)
+                responseStatus = Int(stringValue) ?? -1
+            }
+        }
     }
 
     static func translate(_ text: String, from source: String, to target: String) async throws -> String {
+        guard text.count <= maxQueryLength else { throw TranslationError.tooLong(limit: maxQueryLength) }
+
         var components = URLComponents(string: "https://api.mymemory.translated.net/get")!
         var items = [
             URLQueryItem(name: "q", value: text),
