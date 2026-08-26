@@ -134,15 +134,21 @@ and can be configured to auto-clear itself right after you paste.
 **Translation.** Off by default; turn it on in Settings → Recognition or with ⌘T during
 a capture. When enabled, a captured text is translated instead of going straight to the
 clipboard: the source language is detected on-device (via `NLLanguageRecognizer`), the
-text is sent to [MyMemory](https://mymemory.translated.net)'s free translation API and
-translated into whichever target language you've picked in Settings, and both the
-original and the translation are shown in a small popup. The translation (not the
-original) is what lands on the clipboard once it's ready. Unlike every other feature in
-this app, translation is **not** fully on-device — the captured text is sent to
-MyMemory's servers to be translated, so don't turn it on for anything sensitive. No API
-key or account is required; MyMemory's free tier is rate-limited to roughly 5,000
-words/day per IP address, which an optional contact email in Settings raises to about
-50,000/day.
+text is sent to a translation provider and translated into whichever target language
+you've picked in Settings, and both the original and the translation are shown in a
+resizable popup. The translation (not the original) is what lands on the clipboard once
+it's ready. Unlike every other feature in this app, translation is **not** fully
+on-device — the captured text is sent to a third-party API, so don't turn it on for
+anything sensitive. Two providers are available, switchable in Settings:
+
+- **[MyMemory](https://mymemory.translated.net)** — free, no signup or API key. Rate-limited to
+  roughly 5,000 words/day per IP (an optional contact email in Settings raises that to
+  about 50,000/day), and rejects any single capture over 500 characters outright.
+- **[DeepL](https://deepl.com/pro-api)** — needs a free API key from DeepL (Account → API Keys
+  after signing up for the API Free plan), which TextSnap stores in the Keychain, not in
+  its preferences file. Free tier covers 500,000 characters/month with a far higher
+  per-request limit than MyMemory, and generally better translation quality, at the cost
+  of requiring an account.
 
 **Speech.** Speaks the captured text with an adjustable rate, using a system voice
 matched to the text's detected language. Has its own capture-and-speak shortcut and a
