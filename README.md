@@ -7,16 +7,14 @@ entirely on-device through Apple's Vision framework, so no screenshot or text ev
 leaves the machine.
 
 Beyond plain text capture, it can read QR codes and barcodes, stack multiple captures
-into one growing clipboard payload, translate captured text on-device, speak the
-captured text aloud, and run OCR against existing images, PDFs, or whatever is already
-sitting on the clipboard.
+into one growing clipboard payload, translate captured text, speak the captured text
+aloud, and run OCR against existing images, PDFs, or whatever is already sitting on the
+clipboard.
 
 ## Requirements
 
-- macOS 15 (Sequoia) or newer — required by the Translation framework used for
-  captured-text translation
-- Xcode 16 or newer (or the matching Command Line Tools), for a macOS 15 SDK and
-  `swift build`
+- macOS 13 (Ventura) or newer
+- Xcode or the Xcode Command Line Tools (for `swift build`)
 
 ## Build
 
@@ -134,13 +132,17 @@ It persists across app restarts, is viewable and clearable from Settings → Cli
 and can be configured to auto-clear itself right after you paste.
 
 **Translation.** Off by default; turn it on in Settings → Recognition or with ⌘T during
-a capture. When enabled, a captured text goes through Apple's on-device Translation
-framework instead of straight to the clipboard: the source language is detected
-automatically, translated into whichever target language you've picked in Settings,
-and both the original and the translation are shown in a small popup. The translation
-(not the original) is what lands on the clipboard once it's ready. Detection and
-translation both run on-device — nothing is sent anywhere — though macOS may prompt to
-download language resources the first time you translate a given language pair.
+a capture. When enabled, a captured text is translated instead of going straight to the
+clipboard: the source language is detected on-device (via `NLLanguageRecognizer`), the
+text is sent to [MyMemory](https://mymemory.translated.net)'s free translation API and
+translated into whichever target language you've picked in Settings, and both the
+original and the translation are shown in a small popup. The translation (not the
+original) is what lands on the clipboard once it's ready. Unlike every other feature in
+this app, translation is **not** fully on-device — the captured text is sent to
+MyMemory's servers to be translated, so don't turn it on for anything sensitive. No API
+key or account is required; MyMemory's free tier is rate-limited to roughly 5,000
+words/day per IP address, which an optional contact email in Settings raises to about
+50,000/day.
 
 **Speech.** Speaks the captured text with an adjustable rate, using a system voice
 matched to the text's detected language. Has its own capture-and-speak shortcut and a
@@ -169,7 +171,7 @@ reads whatever image you last copied, and dropping a file onto the app does the 
 | `TextAssembler.swift` | Reading-order and paragraph reconstruction from Vision output |
 | `CaptureCoordinator.swift` | Orchestration: overlay → capture → OCR → clipboard delivery |
 | `AdditiveClipboard.swift` | Accumulating capture buffer with disk persistence |
-| `Translator.swift` | On-device translation via the Translation framework, and its popup |
+| `Translator.swift` | On-device language detection, MyMemory translation client, and its popup |
 | `Feedback.swift` | Confirmation HUD, capture sound, speech, link opening |
 | `SystemServices.swift` | Permission checks and the login-item toggle |
 | `SettingsWindow.swift` | SwiftUI settings window and its panes |
@@ -201,7 +203,6 @@ multi-page PDFs, where main-thread OCR would freeze the UI for several seconds.
 - Continuity Camera import (capturing directly from a paired iPhone's camera) isn't
   implemented. *Read Text from File…* covers the same ground for anything already saved
   to disk.
-- Translation needs macOS 15+ and, the first time a given language pair is used, a
-  one-time download of that pair's language resources — the system handles the prompt,
-  but it means the very first translation for a new pair can take longer than usual.
-  QR/barcode captures are never translated, only text captures.
+- Translation sends captured text to MyMemory's servers rather than staying on-device,
+  needs a network connection, and is subject to MyMemory's free-tier rate limit. Only
+  text captures are translated; QR/barcode captures never are.

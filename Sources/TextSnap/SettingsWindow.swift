@@ -136,7 +136,6 @@ private struct GeneralPane: View {
 private struct RecognitionPane: View {
     @ObservedObject var settings: AppSettings
     @State private var languages: [String] = []
-    @State private var translationLanguages: [String] = ["en"]
     @State private var newWord = ""
 
     var body: some View {
@@ -167,12 +166,14 @@ private struct RecognitionPane: View {
             Section("Translation") {
                 Toggle("Translate captured text", isOn: $settings.translateCapturedText)
                 Picker("Translate to", selection: $settings.translationTargetLanguage) {
-                    ForEach(translationLanguages, id: \.self) { code in
+                    ForEach(TranslationLanguages.targets, id: \.self) { code in
                         Text(Recognizer.displayName(forLanguage: code)).tag(code)
                     }
                 }
                 .disabled(!settings.translateCapturedText)
-                Text("Shows the original text and its translation in a popup, then copies the translation to the clipboard. Runs on-device; macOS may prompt to download language resources the first time you translate a given language pair.")
+                TextField("Contact email (optional)", text: $settings.myMemoryContactEmail)
+                    .disabled(!settings.translateCapturedText)
+                Text("Shows the original text and its translation in a popup, then copies the translation to the clipboard. Language detection runs on-device; the translation itself is sent to MyMemory's free translation service, so translated text does leave the machine. Adding a contact email raises MyMemory's free daily quota.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -217,14 +218,6 @@ private struct RecognitionPane: View {
             languages = Recognizer.supportedLanguages()
             if !languages.contains(settings.primaryLanguage), let first = languages.first {
                 settings.primaryLanguage = first
-            }
-        }
-        .task {
-            let supported = await TranslationLanguages.supportedTargets()
-            guard !supported.isEmpty else { return }
-            translationLanguages = supported
-            if !supported.contains(settings.translationTargetLanguage) {
-                settings.translationTargetLanguage = supported.first { $0 == "en" } ?? supported[0]
             }
         }
     }

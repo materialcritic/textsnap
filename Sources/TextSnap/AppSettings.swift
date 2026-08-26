@@ -72,6 +72,8 @@ final class AppSettings: ObservableObject {
 
     @Published var translateCapturedText: Bool { didSet { store.set(translateCapturedText, forKey: "translateCapturedText") } }
     @Published var translationTargetLanguage: String { didSet { store.set(translationTargetLanguage, forKey: "translationTargetLanguage") } }
+    /// Optional; passed to MyMemory's API to raise the free daily quota. Never required.
+    @Published var myMemoryContactEmail: String { didSet { store.set(myMemoryContactEmail, forKey: "myMemoryContactEmail") } }
 
     // MARK: Feedback
 
@@ -115,6 +117,7 @@ final class AppSettings: ObservableObject {
             "openCapturedLinks": false,
             "translateCapturedText": false,
             "translationTargetLanguage": "en",
+            "myMemoryContactEmail": "",
             "playSound": true,
             "soundName": "Pop",
             "showSuccessPopup": true,
@@ -136,6 +139,7 @@ final class AppSettings: ObservableObject {
 
         translateCapturedText = store.bool(forKey: "translateCapturedText")
         translationTargetLanguage = store.string(forKey: "translationTargetLanguage") ?? "en"
+        myMemoryContactEmail = store.string(forKey: "myMemoryContactEmail") ?? ""
 
         playSound = store.bool(forKey: "playSound")
         soundName = store.string(forKey: "soundName") ?? "Pop"

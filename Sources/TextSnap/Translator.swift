@@ -1,24 +1,107 @@
 import AppKit
 import SwiftUI
-import Translation
+import NaturalLanguage
 
 // MARK: - Supported languages
 
-@MainActor
 enum TranslationLanguages {
-    /// Languages this Mac has (or can download) translation resources for.
-    static func supportedTargets() async -> [String] {
-        let languages = await LanguageAvailability().supportedLanguages
-        let codes = Set(languages.compactMap { $0.languageCode?.identifier })
-        return codes.sorted { Recognizer.displayName(forLanguage: $0) < Recognizer.displayName(forLanguage: $1) }
+    /// A broad, fixed set of MyMemory-supported languages. MyMemory covers far more than
+    /// this, but a curated list keeps the Settings picker short and each entry usable.
+    static let targets = [
+        "en", "es", "fr", "de", "it", "pt", "nl", "ru", "ja", "ko", "zh", "ar", "hi",
+        "tr", "pl", "sv", "da", "no", "fi", "cs", "el", "he", "hu", "id", "th", "vi",
+        "uk", "ro", "bg", "sk", "hr", "sr", "lt", "lv", "et", "fa", "ur"
+    ].sorted { Recognizer.displayName(forLanguage: $0) < Recognizer.displayName(forLanguage: $1) }
+}
+
+// MARK: - Translation errors
+
+enum TranslationError: LocalizedError {
+    case noConnection
+    case rateLimited
+    case serverError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noConnection:      return "Couldn't reach the translation service. Check your connection."
+        case .rateLimited:       return "The free translation quota is used up for today. Add a contact email in Settings to raise the limit, or try again tomorrow."
+        case .serverError(let m): return m
+        }
+    }
+}
+
+// MARK: - MyMemory client
+
+/// Talks to MyMemory's free translation API (mymemory.translated.net). No API key is
+/// required; an optional contact email (Settings → Recognition) raises the free daily
+/// quota from ~5,000 to ~50,000 words. Sending text here means it leaves the machine,
+/// unlike every other recognition feature in the app, which runs entirely on-device.
+enum MyMemoryClient {
+    private struct Envelope: Decodable {
+        struct Data: Decodable { let translatedText: String }
+        let responseData: Data
+        let responseStatus: Int
+    }
+
+    static func translate(_ text: String, from source: String, to target: String) async throws -> String {
+        var components = URLComponents(string: "https://api.mymemory.translated.net/get")!
+        var items = [
+            URLQueryItem(name: "q", value: text),
+            URLQueryItem(name: "langpair", value: "\(source)|\(target)")
+        ]
+        let email = await AppSettings.shared.myMemoryContactEmail
+        if !email.trimmingCharacters(in: .whitespaces).isEmpty {
+            items.append(URLQueryItem(name: "de", value: email))
+        }
+        components.queryItems = items
+
+        guard let url = components.url else { throw TranslationError.serverError("Couldn't build a request for that text.") }
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(from: url)
+        } catch {
+            throw TranslationError.noConnection
+        }
+
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw TranslationError.serverError("The translation service returned an error.")
+        }
+
+        let envelope: Envelope
+        do {
+            envelope = try JSONDecoder().decode(Envelope.self, from: data)
+        } catch {
+            throw TranslationError.serverError("The translation service sent back something unexpected.")
+        }
+
+        guard envelope.responseStatus == 200 else {
+            if envelope.responseStatus == 403 { throw TranslationError.rateLimited }
+            throw TranslationError.serverError("Translation failed (status \(envelope.responseStatus)).")
+        }
+
+        let translated = envelope.responseData.translatedText
+        guard !translated.contains("MYMEMORY WARNING") else { throw TranslationError.rateLimited }
+        return translated
+    }
+}
+
+// MARK: - On-device language detection
+
+enum LanguageDetector {
+    /// Falls back to English when the text is too short or ambiguous to classify.
+    static func detect(_ text: String) -> String {
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        return recognizer.dominantLanguage?.rawValue ?? "en"
     }
 }
 
 // MARK: - Popup window
 
-/// Shows a captured text's on-device translation. Detection of the source language and
-/// the translation itself both happen through Apple's Translation framework, driven by
-/// the `translationTask` modifier on `TranslationPopupView` below.
+/// Shows a captured text's translation: detects the source language on-device, sends the
+/// text to MyMemory for translation, and displays both alongside each other.
 @MainActor
 final class TranslationPopupController {
     static let shared = TranslationPopupController()
@@ -85,9 +168,8 @@ private struct TranslationPopupView: View {
     let onTranslated: (String) -> Void
     let onClose: () -> Void
 
-    @State private var configuration: TranslationSession.Configuration?
-    @State private var translatedText: String?
     @State private var detectedLanguageName: String?
+    @State private var translatedText: String?
     @State private var errorMessage: String?
 
     var body: some View {
@@ -109,20 +191,25 @@ private struct TranslationPopupView: View {
         }
         .padding(16)
         .frame(width: 420, height: 280)
-        .task {
-            configuration = TranslationSession.Configuration(
-                target: Locale.Language(identifier: targetLanguageCode))
+        .task { await translate() }
+    }
+
+    private func translate() async {
+        let sourceCode = LanguageDetector.detect(originalText)
+        detectedLanguageName = Recognizer.displayName(forLanguage: sourceCode)
+
+        guard sourceCode != targetLanguageCode else {
+            translatedText = originalText
+            onTranslated(originalText)
+            return
         }
-        .translationTask(configuration) { session in
-            do {
-                let response = try await session.translate(originalText)
-                let code = response.sourceLanguage.languageCode?.identifier ?? response.sourceLanguage.minimalIdentifier
-                detectedLanguageName = Recognizer.displayName(forLanguage: code)
-                translatedText = response.targetText
-                onTranslated(response.targetText)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+
+        do {
+            let result = try await MyMemoryClient.translate(originalText, from: sourceCode, to: targetLanguageCode)
+            translatedText = result
+            onTranslated(result)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
